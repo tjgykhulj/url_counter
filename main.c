@@ -138,18 +138,10 @@ void readSegData(char *filename) {
     fprintf(stdout, "read seg data success, cost: %.4fs\n", (double) (clock()-start_time) / CLOCKS_PER_SEC);
 }
 
-/* 思路是读取指定文件，切割为SEG_FILE_NUM份信息，每份中带有offset, len, hash
-每个文件解析为一个map，并更新到一个小根堆中，小根堆里最终是全量中的count top 100
-若某一份切割文件解出的map的key数量过大，可以将SEG_FILE_NUM++并重试。
-
- 由于使用hash+len判断值，有一个较小的错判率。为了保证100%正确，有两种方向：
- 1. 当两个字串的hash与len均相同时，读src input文件中指定offset来判断字串是否真的相同
- 2. 做一个hash2值，使错判断小到忽略不计
-  */
 int main(int argc, char **argv) {
     char *filename = "out/url";
-    //mock_data(filename, (i64)10<<30);  // mock数据
-    //segData(filename);      //1278s：切割指定文件为SEG_FILE_NUM份
+    mock_data(filename, (i64)10<<30);  // mock数据
+    segData(filename);      //1278s：切割指定文件为SEG_FILE_NUM份
     readSegData(filename);  //5909s：解析指定文件，打出top 100
 
     return 0;
