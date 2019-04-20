@@ -14,8 +14,8 @@ void mock_data(char *filename, i64 size) {
     char buf[1024];
     size_t len = 0, l = 0;
     while (size--) {
-        i64 c = random() % 27;
-        if (c < 26) {
+        i64 c = random() % 15;
+        if (c < 14) {
             buf[len++] = (char) ('a' + c);
             l++;
         } else {
