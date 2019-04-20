@@ -140,7 +140,7 @@ void readSegData(char *filename) {
 
 int main(int argc, char **argv) {
     char *filename = "out/url";
-    mock_data(filename, (i64)10<<30);  // mock数据
+    mock_data(filename, (i64)100<<30);  // mock数据
     segData(filename);      //1278s：切割指定文件为SEG_FILE_NUM份
     readSegData(filename);  //5909s：解析指定文件，打出top 100
 
