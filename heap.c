@@ -4,7 +4,6 @@
 #include "heap.h"
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 void swap(heap *h, int i, int j) {
     void *t = h->ele[i];
