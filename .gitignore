@@ -1,3 +1,5 @@
 cmake*
 CMake*
 .idea
+*.o
+url_counter
