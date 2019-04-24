@@ -1,4 +1,15 @@
 # url_counter
+* Usage
+
+    make build
+
+	mkdir -p out
+
+	./mock out/url 1024   // mock 1024MB的数据，写入out/url文件
+
+	./url_counter out/url  // 分析指定的out/url内，以换行符分割的url的count top 100
+
+
 * 简介
     * 功能：读取指定filename中，换行符分割的url，输出数量top 100的url  
     * 数据：100GB文件  
