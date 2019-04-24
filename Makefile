@@ -21,7 +21,7 @@ clean:
 
 test: build
 	mkdir -p out
-	./mock out/url 10240
+	./mock out/url 1024
 	./url_counter out/url
 
 #内存泄露检测用的是valgrind --tool=memcheck --leak-check=full ./${PROGNAME} out/url

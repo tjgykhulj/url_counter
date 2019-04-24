@@ -11,7 +11,7 @@
 #define LOADBUF_LEN 1024
 #define HASH_INIT_VAL 1125899906842597L
 
-int SEG_FILE_NUM = 12;
+int SEG_FILE_NUM = 64;
 
 typedef long long i64;
 
@@ -53,7 +53,7 @@ void segData(char *filename) {
 
 // 读取指定文件中的map<url, count>计数并更新到heap *h中，若数量过大需要切分
 void readAndSegData(char *filename, heap *h) {
-    fprintf(stdout, "filename %s begin\n", filename);
+    //fprintf(stdout, "filename %s begin\n", filename);
     FILE *fp = fopen(filename, "r");
     dict *d = dictCreate(fp);
     dictEntry e;
@@ -64,7 +64,7 @@ void readAndSegData(char *filename, heap *h) {
             dictRelease(d);
             fclose(fp);
             // 尝试继续切割文件
-            fprintf(stdout, "filename %s need to seg\n", filename);
+            fprintf(stdout, "filename %s is too large, need to seg\n", filename);
             segData(filename);
             char segFilename[512];
             for (int i=0; i<SEG_FILE_NUM; i++) {
