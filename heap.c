@@ -50,6 +50,7 @@ heap* heapCreate(int cap, int (*cmp) (const void *,const void *)) {
     return h;
 }
 
+// 插入元素void *ele并维持总量在cap限制内（无需维护的元素会主动释放）
 void heapInsert(heap *h, void *ele) {
     if (h->size < h->cap || h->cmp(ele, h->ele[0]) > 0) {
         if (h->size == h->cap) {
@@ -59,6 +60,8 @@ void heapInsert(heap *h, void *ele) {
             }
         }
         push(h, ele);
+    } else {
+        free(ele);  // 若方法不插入ele数据，将其free掉以免空间浪费
     }
 }
 

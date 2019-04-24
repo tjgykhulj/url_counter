@@ -24,7 +24,7 @@ typedef struct dict {
 } dict;
 
 dict *dictCreate(FILE* fp);
-int64_t dictAdd(dict *d, dictEntry* e);
+int64_t dictAdd(dict *d, dictEntry e);
 void dictDumpToHeap(dict *d, heap *h);
 void dictRelease(dict *d);
 

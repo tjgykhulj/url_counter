@@ -1,21 +1,28 @@
+CFLAGS=-std=c99
+
 # file
 dict.o: dict.c dict.h heap.h
 heap.o: heap.c heap.h
-mock.o: mock.c mock.h
-main.o: main.c mock.h heap.h dict.h
+main.o: main.c heap.h dict.h
+mock.o: mock.c
 
-OBJ = main.o mock.o heap.o dict.o
-PROGNAME = url_counter
+OBJ = main.o heap.o dict.o
+MOCK = mock.o
+
 CCOPT = -O2
 
-build: $(OBJ)
-	$(CC) -o $(PROGNAME) $(CCOPT) $(OBJ)
-
-run:
-	./${PROGNAME}
-
-server:
-	build run
+build: $(OBJ) $(MOCK)
+	$(CC) -o url_counter $(CCOPT) $(OBJ)
+	$(CC) -o mock $(CCOPT) $(MOCK)
 
 clean:
-	rm -rf $(PROGNAME) *.o
+	rm -rf url_counter mock
+	rm -rf *.o out
+
+test: build
+	mkdir -p out
+	./mock out/url 10240
+	./url_counter out/url
+
+#内存泄露检测用的是valgrind --tool=memcheck --leak-check=full ./${PROGNAME} out/url
+

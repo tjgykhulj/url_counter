@@ -3,3 +3,5 @@ CMake*
 .idea
 *.o
 url_counter
+mock
+out

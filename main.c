@@ -1,6 +1,5 @@
 // Created by tang on 2019-04-15.
 //
-#include "mock.h"
 #include "heap.h"
 #include "dict.h"
 #include <stdio.h>
@@ -11,103 +10,14 @@
 
 #define LOADBUF_LEN 1024
 #define HASH_INIT_VAL 1125899906842597L
-#define SEG_FILE_NUM 256
-#define SEG_FILE_MASK (SEG_FILE_NUM - 1)
+
+int SEG_FILE_NUM = 12;
 
 typedef long long i64;
 
-// 创建FILE_NUM个文件
-FILE** createSegFile(char *srcFilename, const char *mode) {
-    FILE **fps = malloc(sizeof(FILE*) * SEG_FILE_NUM);
-    for (int i=0; i<SEG_FILE_NUM; i++) {
-        char segFilename[256];
-        snprintf(segFilename, 256, "%s_%d", srcFilename, i);
-        fps[i] = fopen(segFilename, mode);
-    }
-    return fps;
-}
-
-void recordUrlInfo(FILE *fp, i64 start, i64 end, unsigned long hash) {
-    dictEntry e = {hash, start, end-start+1};
+void recordUrlInfo(FILE *fp, i64 offset, i64 len, unsigned long hash) {
+    dictEntry e = {hash, offset, len};
     fwrite(&e, 24, 1, fp);
-}
-
-/* 若长度较小，使用uchar str[LOADBUF_LEN]；单条url过长冲破str，直接从src指定位置开始逐段读出，写入dst
-void recordUrl(FILE *src, FILE *dst, i64 start, i64 end, unsigned char *str) {
-    if (end-start <= LOADBUF_LEN) {
-        str[end-start] = '\n';
-        fwrite(str, 1, (size_t) end-start+1, dst);
-        return;
-    }
-
-    fprintf(stdout, "buffer is too long(%lld->%lld), copy from file to file", start, end);
-    // 记录src流原本指针位置
-    i64 srcPos = ftell(src), i = start;
-    fseek(src, start, SEEK_SET);
-
-    unsigned char buf[LOADBUF_LEN+1];
-    while (i < end) {
-        size_t len = (size_t) min(end-i, LOADBUF_LEN);
-        if (fread(buf, 1, len, src) > 0) {
-            buf[len] = '\n';
-            fwrite(buf, 1, len + 1, dst);
-            i += len;
-        }
-    }
-    // 回到src流原本指针位置
-    fseek(src, srcPos, SEEK_SET);
-}
- */
-
-// 刮分数据到FILE_NUM个文件
-int segData(char* filename) {
-    clock_t start_time = clock();
-
-    FILE *fp = fopen(filename, "r");
-    FILE **segFps = createSegFile(filename, "w");
-
-    unsigned long hash = HASH_INIT_VAL;
-    size_t size = 0;
-    i64 start = 0, end = 0;
-    unsigned char buf[LOADBUF_LEN+1], str[LOADBUF_LEN+1];
-    while ((size = fread(buf, 1, LOADBUF_LEN, fp)) > 0) {
-        for (i64 i=0; i<size; i++, end++) {
-            if (buf[i] != '\r' && buf[i] != '\n') {
-                hash = ((hash << 5) + hash) + buf[i];
-                continue;
-            }
-            recordUrlInfo(segFps[hash & SEG_FILE_MASK], start, end, hash);
-            while (buf[i+1] == '\r' || buf[i+1] == '\n') {  //不同的换行可能性
-                i++;
-                end++;
-            }
-            start = end + 1;
-            hash = HASH_INIT_VAL;
-        }
-        memset(buf, 0, LOADBUF_LEN);
-    }
-
-    fclose(fp);
-    for (int i=0; i<SEG_FILE_NUM; i++) {
-        fclose(segFps[i]);
-    }
-
-    fprintf(stdout, "seg file success, cost: %.4fs\n", (double) (clock()-start_time) / CLOCKS_PER_SEC);
-    return 0;
-}
-
-void _readSegData(heap *h, FILE *fp, FILE *segFp) {
-    dict *d = dictCreate(fp);
-    for (int i=0; 1; i++) {
-        dictEntry *e = malloc(sizeof(dictEntry));
-        if (fread(e, 24, 1, segFp) == 0) {
-            free(e);
-            break;
-        }
-        dictAdd(d, e);
-    }
-    dictDumpToHeap(d, h);
-    dictRelease(d);
 }
 
 int cmpDictEntry(const void *first, const void *second) {
@@ -118,31 +28,121 @@ int cmpDictEntry(const void *first, const void *second) {
     return a->count > b->count? 1: -1;
 }
 
-// 读切割后的文件
-void readSegData(char *filename) {
-    clock_t start_time = clock();
-
+// 切分数据到FILE_NUM个文件
+void segData(char *filename) {
+    uint64_t now = (uint64_t) time(NULL);
     FILE *fp = fopen(filename, "r");
-    FILE **segFps = createSegFile(filename, "r");
-    heap *h = heapCreate(100, cmpDictEntry);
+    FILE **segFps = malloc(sizeof(FILE*) * SEG_FILE_NUM);
     for (int i=0; i<SEG_FILE_NUM; i++) {
-        fprintf(stdout, "[file %d]\n", i);
-        _readSegData(h, fp, segFps[i]);
+        char segFilename[512];
+        snprintf(segFilename, 512, "%s_%d", filename, i);
+        segFps[i] = fopen(segFilename, "w");
+    }
+
+    dictEntry e;
+    while (fread(&e, 24, 1, fp)) {
+        uint64_t idx = (e.hash + now) & (SEG_FILE_NUM-1);
+        recordUrlInfo(segFps[idx], e.offset, e.len, e.hash);
+    }
+    fclose(fp);
+    for (int i=0; i<SEG_FILE_NUM; i++) {
         fclose(segFps[i]);
     }
+    free(segFps);
+}
+
+// 读取指定文件中的map<url, count>计数并更新到heap *h中，若数量过大需要切分
+void readAndSegData(char *filename, heap *h) {
+    fprintf(stdout, "filename %s begin\n", filename);
+    FILE *fp = fopen(filename, "r");
+    dict *d = dictCreate(fp);
+    dictEntry e;
+    while (fread(&e, 24, 1, fp) > 0) {
+        i64 ret = dictAdd(d, e);
+        if (ret == -1) {
+            // 失败，单文件不同的url量过大，释放资源
+            dictRelease(d);
+            fclose(fp);
+            // 尝试继续切割文件
+            fprintf(stdout, "filename %s need to seg\n", filename);
+            segData(filename);
+            char segFilename[512];
+            for (int i=0; i<SEG_FILE_NUM; i++) {
+                snprintf(segFilename, 512, "%s_%d", filename, i);
+                readAndSegData(segFilename, h);
+            }
+            return;
+        }
+    }
+    dictDumpToHeap(d, h);
+    dictRelease(d);
+    fclose(fp);
+}
+
+void countData(char *filename) {
+    clock_t start_time = clock();
+
+    heap *h = heapCreate(100, cmpDictEntry);
+    readAndSegData(filename, h);
+
     void **top = heapRelease(h);
     for (int i=0; i<100; i++) {
         dictEntry *x = top[i];
         fprintf(stdout, "hash=%llu, off=%lld, len=%lld, count=%lld\n", x->hash, x->offset, x->len, x->count);
+        free(x);
     }
-    fprintf(stdout, "read seg data success, cost: %.4fs\n", (double) (clock()-start_time) / CLOCKS_PER_SEC);
+    free(top);
+    fprintf(stdout, "read data success, cost: %.4fs\n", (double) (clock()-start_time) / CLOCKS_PER_SEC);
+}
+
+// 解析文件，转为hash,offset,len数据
+char* analyseData(char* filename) {
+    clock_t start_time = clock();
+    char *dstFn = malloc(512);
+    snprintf(dstFn, 512, "%s~", filename);
+    FILE *fp = fopen(filename, "r");
+    FILE *dstFp = fopen(dstFn, "w");
+
+    unsigned long hash = HASH_INIT_VAL;
+    size_t size = 0;
+    i64 start = 0, end = 0;
+    unsigned char buf[LOADBUF_LEN+1];
+    while ((size = fread(buf, 1, LOADBUF_LEN, fp)) > 0) {
+        for (i64 i=0; i<size; i++, end++) {
+            if (buf[i] != '\r' && buf[i] != '\n') {
+                hash = ((hash << 5) + hash) + buf[i];
+                continue;
+            }
+            recordUrlInfo(dstFp, start, end-start, hash);
+            while (buf[i+1] == '\r' || buf[i+1] == '\n') {  //不同的换行可能性
+                i++;
+                end++;
+            }
+            start = end + 1;
+            hash = HASH_INIT_VAL;
+        }
+        memset(buf, 0, LOADBUF_LEN);
+    }
+    fclose(fp);
+    fclose(dstFp);
+
+    fprintf(stdout, "analyse file success, cost: %.4fs\n", (double) (clock()-start_time) / CLOCKS_PER_SEC);
+    return dstFn;
 }
 
 int main(int argc, char **argv) {
-    char *filename = "out/url";
-    mock_data(filename, (i64)100<<30);  // mock数据
-    segData(filename);      //1278s：切割指定文件为SEG_FILE_NUM份
-    readSegData(filename);  //5909s：解析指定文件，打出top 100
+    if (argc < 2) {
+        fprintf(stderr, "Usage ./url_counter [filename]\n");
+        return 0;
+    }
+    if (strlen(argv[1]) == 0 || strlen(argv[1]) > 200) {
+        fprintf(stderr, "filename len should between (0, 200)");
+        return 0;
+    }
+    char* filename = argv[1];
 
+    char* analyseFn = analyseData(filename);
+    countData(analyseFn);
+    free(analyseFn);
     return 0;
 }

@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define LIMIT_SIZE 15000000 //2m
+
 uint64_t rehash(uint64_t x) {
     x = (x ^ (x >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
     x = (x ^ (x >> 27)) * UINT64_C(0x94d049bb133111eb);
@@ -42,19 +44,24 @@ void dictExpand(dict *d) {
     *d = n;
 }
 
-int64_t dictAdd(dict *d, dictEntry* e) {
-    uint64_t idx = rehash(e->hash) & (d->size-1);
+int64_t dictAdd(dict *d, dictEntry e) {
+    uint64_t idx = rehash(e.hash) & (d->size-1);
     for (dictEntry* i=d->table[idx]; i; i=i->next) {
-        if (i->hash == e->hash && i->len == e->len) {
+        if (i->hash == e.hash && i->len == e.len) {
             return ++i->count;
         }
     }
-    if (++d->used == d->size) {
+    if (++d->used > LIMIT_SIZE) { // LIMIT_SIZE * sizeof(dictEntry) < 687MB
+        return -1;
+    }
+    if (d->used == d->size) {
         dictExpand(d);
     }
-    e->next = d->table[idx];
-    d->table[idx] = e;
-    return e->count = 1;
+    dictEntry *entry = malloc(sizeof(dictEntry));
+    *entry = e;
+    entry->next = d->table[idx];
+    d->table[idx] = entry;
+    return entry->count = 1;
 }
 
 void dictRelease(dict *d) {
